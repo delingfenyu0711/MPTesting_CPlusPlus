@@ -16,6 +16,8 @@
 #include "Online/OnlineSessionNames.h"
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystem.h"
+#include "Interfaces/OnlineIdentityInterface.h"
+
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -84,289 +86,401 @@ AMPTesting_CPlusPlusCharacter::AMPTesting_CPlusPlusCharacter():
 				);
 		}
 	}
-
 }
 
 void AMPTesting_CPlusPlusCharacter::BeginPlay()
 {
-	// Call the base class  
 	Super::BeginPlay();
+
+	// 确保使用正确的在线子系统
 	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
 	if (OnlineSubsystem)
 	{
+		FString SubsystemName = OnlineSubsystem->GetSubsystemName().ToString();
+		UE_LOG(LogTemp, Warning, TEXT("Using OnlineSubsystem: %s"), *SubsystemName);
+
 		OnlineSessionInterface = OnlineSubsystem->GetSessionInterface();
+		
+		if (OnlineSessionInterface.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Online session interface is valid"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("Online session interface is invalid"));
+		}
 	}
 	else
 	{
-		// 关键：添加子系统获取失败的调试信息
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Red, TEXT("Failed to get OnlineSubsystem!"));
-		}
+		UE_LOG(LogTemp, Error, TEXT("OnlineSubsystem is null"));
 	}
+
+	// 调试登录状态
+	DebugLoginStatus();
+}
+
+FUniqueNetIdRepl AMPTesting_CPlusPlusCharacter::GetPlayerNetId() const
+{
+	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
+	if (!OnlineSubsystem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No OnlineSubsystem found"));
+		return FUniqueNetIdRepl();
+	}
+
+	IOnlineIdentityPtr IdentityInterface = OnlineSubsystem->GetIdentityInterface();
+	if (!IdentityInterface.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Identity interface not valid"));
+		return FUniqueNetIdRepl();
+	}
+
+	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	if (!LocalPlayer)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No local player found"));
+		return FUniqueNetIdRepl();
+	}
+
+	int32 ControllerId = LocalPlayer->GetControllerId();
+    
+	// 首先尝试从身份接口获取
+	TSharedPtr<const FUniqueNetId> NetIdPtr = IdentityInterface->GetUniquePlayerId(ControllerId);
+	if (NetIdPtr.IsValid())
+	{
+		FUniqueNetIdRepl NetIdRepl(NetIdPtr);
+		UE_LOG(LogTemp, Warning, TEXT("Using NetId from Identity interface: %s"), *NetIdToString(NetIdRepl));
+		return NetIdRepl;
+	}
+
+	// 如果身份接口没有，尝试其他方法
+	FUniqueNetIdRepl PreferredNetId = LocalPlayer->GetPreferredUniqueNetId();
+	if (PreferredNetId.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Using PreferredUniqueNetId: %s"), *NetIdToString(PreferredNetId));
+		return PreferredNetId;
+	}
+
+	FUniqueNetIdRepl CachedNetId = LocalPlayer->GetCachedUniqueNetId();
+	if (CachedNetId.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Using CachedUniqueNetId: %s"), *NetIdToString(CachedNetId));
+		return CachedNetId;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Could not get valid NetId from any source"));
+	return FUniqueNetIdRepl();
 }
 
 void AMPTesting_CPlusPlusCharacter::CreateGameSession()
 {
-	//Called when pressing the 1 key
-	if (!OnlineSessionInterface.IsValid())
-	{
-		return;
-	}
-	auto ExistingSession = OnlineSessionInterface->GetNamedSession(NAME_GameSession);
-	if (ExistingSession != nullptr)
-	{
-		OnlineSessionInterface->DestroySession(NAME_GameSession);
-	}
-	OnlineSessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
+    if (!OnlineSessionInterface.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("OnlineSessionInterface is not valid"));
+        return;
+    }
 
-	TSharedPtr<FOnlineSessionSettings> SessionSettings = MakeShareable(new FOnlineSessionSettings());
-	SessionSettings->bIsLANMatch = false;
-	SessionSettings->NumPrivateConnections = 4;
-	SessionSettings->bAllowJoinViaPresence = true;
-	SessionSettings->bShouldAdvertise = true;
-	SessionSettings->bUsesPresence = true;
-	SessionSettings->bUseLobbiesIfAvailable = true;
-	SessionSettings->Set(FName("MatchType"), FString("FreeForAll"), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
-    
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController(); 
-	if (!LocalPlayer)
+    // 检查登录状态
+    DebugLoginStatus();
+
+    // 销毁现有会话
+    auto ExistingSession = OnlineSessionInterface->GetNamedSession(NAME_GameSession);
+    if (ExistingSession != nullptr)
+    {
+        OnlineSessionInterface->DestroySession(NAME_GameSession);
+    }
+
+    OnlineSessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
+
+    TSharedPtr<FOnlineSessionSettings> SessionSettings = MakeShareable(new FOnlineSessionSettings());
+    SessionSettings->bIsLANMatch = false;
+    SessionSettings->NumPublicConnections = 4; // 使用PublicConnections而不是PrivateConnections
+    SessionSettings->bAllowJoinInProgress = true;
+    SessionSettings->bAllowJoinViaPresence = true;
+    SessionSettings->bShouldAdvertise = true;
+    SessionSettings->bUsesPresence = true;
+    SessionSettings->bUseLobbiesIfAvailable = true;
+    SessionSettings->Set(FName("MatchType"), FString("FreeForAll"), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+
+    // 使用统一的网络ID获取方法
+    FUniqueNetIdRepl NetId = GetPlayerNetId();
+    if (!NetId.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot create session: Invalid NetId"));
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Red, TEXT("Cannot create session: Player not logged in"));
+        }
+        return;
+    }
+
+	if (const FUniqueNetId* RawNetId = NetId.GetUniqueNetId().Get())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LocalPlayer is null in CreateGameSession"));
-		return;
+		FString NetIdStr = RawNetId->ToString();
+		UE_LOG(LogTemp, Warning, TEXT("NetId: %s"), *NetIdStr);
 	}
-    
-	// 检查 UniqueNetId 是否有效
-	const FUniqueNetIdRepl NetId = LocalPlayer->GetPreferredUniqueNetId();
-	if (!NetId.IsValid())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UniqueNetId is invalid - player may not be logged in"));
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Red,
-				TEXT("Cannot create session: Player not logged in")
-			);
-		}
-		return;
-	}
-    
-	OnlineSessionInterface->CreateSession(*NetId, NAME_GameSession, *SessionSettings);
+    OnlineSessionInterface->CreateSession(*NetId, NAME_GameSession, *SessionSettings);
 }
-
-/*void AMPTesting_CPlusPlusCharacter::CreateGameSession()
-{
-	//Called when pressing the 1 key
-	if (!OnlineSessionInterface.IsValid())
-	{
-		return;
-	}
-	auto ExistingSession = OnlineSessionInterface->GetNamedSession(NAME_GameSession);
-	if (ExistingSession != nullptr)
-	{
-		OnlineSessionInterface->DestroySession(NAME_GameSession);
-	}
-	OnlineSessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
-
-	TSharedPtr<FOnlineSessionSettings> SessionSettings = MakeShareable(new FOnlineSessionSettings());
-	SessionSettings->bIsLANMatch = false;
-	SessionSettings->NumPrivateConnections = 4;
-	SessionSettings->bAllowJoinViaPresence = true;
-	SessionSettings->bShouldAdvertise = true;
-	SessionSettings->bUsesPresence = true;
-	SessionSettings->bUseLobbiesIfAvailable = true;
-	//SessionSettings->Set(FName("MatchType"), FName("FreeForAll"),EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
-	SessionSettings->Set(FName("MatchType"), FString("FreeForAll"), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
-	
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController(); 
-	OnlineSessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(),NAME_GameSession,*SessionSettings);
-	
-}*/
-
-/*void AMPTesting_CPlusPlusCharacter::JoinGameSession()
-{
-	//Find game sessions
-
-	if (!OnlineSessionInterface.IsValid())
-	{
-		return;
-	}
-	OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
-	
-	SessionSearch = MakeShareable(new FOnlineSessionSearch());
-	if (!SessionSearch.IsValid())
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create SessionSearch"));
-		return;
-	}
-	SessionSearch->MaxSearchResults = 10000;
-	SessionSearch->bIsLanQuery = false;
-	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE,true,EOnlineComparisonOp::Equals);
-
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController(); 
-	OnlineSessionInterface->FindSessions(*LocalPlayer->GetCachedUniqueNetId(),
-		SessionSearch.ToSharedRef());
-	
-}*/
 
 void AMPTesting_CPlusPlusCharacter::JoinGameSession()
 {
-	//Find game sessions
-	if (!OnlineSessionInterface.IsValid())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("OnlineSessionInterface is invalid"));
-		return;
-	}
-    
-	OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
-    
-	SessionSearch = MakeShareable(new FOnlineSessionSearch());
-	if (!SessionSearch.IsValid())
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create SessionSearch"));
-		return;
-	}
-    
-	SessionSearch->MaxSearchResults = 10000;
-	SessionSearch->bIsLanQuery = false;
-	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+    if (!OnlineSessionInterface.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("OnlineSessionInterface is not valid"));
+        return;
+    }
 
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController(); 
-	if (!LocalPlayer)
+    // 检查登录状态
+    DebugLoginStatus();
+
+    OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
+
+    SessionSearch = MakeShareable(new FOnlineSessionSearch());
+    if (!SessionSearch.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create SessionSearch"));
+        return;
+    }
+
+    SessionSearch->MaxSearchResults = 10000;
+    SessionSearch->bIsLanQuery = false;
+    SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+
+    // 使用统一的网络ID获取方法
+    FUniqueNetIdRepl NetId = GetPlayerNetId();
+    if (!NetId.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot join session: Invalid NetId"));
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Red, TEXT("Cannot join session: Player not logged in"));
+        }
+        return;
+    }
+
+	if (const FUniqueNetId* RawNetId = NetId.GetUniqueNetId().Get())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LocalPlayer is null"));
-		return;
+		FString NetIdStr = RawNetId->ToString();
+		UE_LOG(LogTemp, Warning, TEXT("NetId: %s"), *NetIdStr);
 	}
-    
-	// 检查 UniqueNetId 是否有效
-	const FUniqueNetIdRepl NetId = LocalPlayer->GetCachedUniqueNetId();
-	if (!NetId.IsValid())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UniqueNetId is invalid - player may not be logged in"));
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Red,
-				TEXT("Cannot join session: Player not logged in")
-			);
-		}
-		return;
-	}
-    
-	OnlineSessionInterface->FindSessions(*NetId, SessionSearch.ToSharedRef());
+    OnlineSessionInterface->FindSessions(*NetId, SessionSearch.ToSharedRef());
 }
 
 void AMPTesting_CPlusPlusCharacter::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
-	if (bWasSuccessful)
-	{
-		// 会话创建成功
-		UE_LOG(LogTemp, Warning, TEXT("Session created successfully: %s"), *SessionName.ToString());
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Blue,
-				FString::Printf(TEXT("Created session:%s"),*SessionName.ToString())
-			);
-		}
+    if (bWasSuccessful)
+    {
+        // 会话创建成功
+        UE_LOG(LogTemp, Warning, TEXT("Session created successfully: %s"), *SessionName.ToString());
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(
+                -1,
+                15.f,
+                FColor::Blue,
+                FString::Printf(TEXT("Created session: %s"), *SessionName.ToString())
+            );
+        }
 
-		UWorld* World = GetWorld();
-		if (World)
-		{
-			World->ServerTravel(FString("/Game/ThirdPerson/Maps/Lobby"));
-			
-		}
-	}
-	else
-	{
-		// 会话创建失败
-		UE_LOG(LogTemp, Error, TEXT("Failed to create session"));
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Red,
-				FString(TEXT("Failed to create session"))
-			);
-		}
-	}
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            World->ServerTravel(FString("/Game/ThirdPerson/Maps/Lobby?listen"));
+        }
+    }
+    else
+    {
+        // 会话创建失败
+        UE_LOG(LogTemp, Error, TEXT("Failed to create session"));
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(
+                -1,
+                15.f,
+                FColor::Red,
+                TEXT("Failed to create session")
+            );
+        }
+    }
 }
 
 void AMPTesting_CPlusPlusCharacter::OnFindSessionComplete(bool bWasSuccessful)
 {
-	if (!OnlineSessionInterface.IsValid())
-	{
-		return;
-	}
-	for (auto Result : SessionSearch->SearchResults)
-	{
-		FString Id = Result.GetSessionIdStr();
-		FString User = Result.Session.OwningUserName;
-		FString MatchType;
-		Result.Session.SessionSettings.Get(FName("MatchType"),MatchType);
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Cyan,
-				FString::Printf(TEXT("Id: %s,User:%s"),*Id,*User)
-				);
-		}
-		if (MatchType.Equals(TEXT("FreeForAll")))
-		{
-			if (GEngine)
-			{
-				GEngine->AddOnScreenDebugMessage(
-					-1,
-					15.f,
-					FColor::Cyan,
-					FString::Printf(TEXT("Joining Match Type:%s"),*MatchType)
-					);
-			}
+    if (!OnlineSessionInterface.IsValid() || !SessionSearch.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Invalid interfaces in OnFindSessionComplete"));
+        return;
+    }
 
-			OnlineSessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
-			const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController(); 
-			OnlineSessionInterface->JoinSession(*LocalPlayer->GetCachedUniqueNetId(),NAME_GameSession,Result);
-			
-		}
-	}
+    UE_LOG(LogTemp, Warning, TEXT("Find sessions completed. Successful: %d, Results: %d"), 
+        bWasSuccessful, SessionSearch->SearchResults.Num());
+
+    if (!bWasSuccessful || SessionSearch->SearchResults.Num() == 0)
+    {
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Red, 
+                FString::Printf(TEXT("No sessions found or search failed. Results: %d"), 
+                SessionSearch->SearchResults.Num()));
+        }
+        return;
+    }
+
+    for (auto Result : SessionSearch->SearchResults)
+    {
+        FString Id = Result.GetSessionIdStr();
+        FString User = Result.Session.OwningUserName;
+        FString MatchType;
+        Result.Session.SessionSettings.Get(FName("MatchType"), MatchType);
+        
+        UE_LOG(LogTemp, Warning, TEXT("Found session - ID: %s, User: %s, MatchType: %s"), 
+            *Id, *User, *MatchType);
+
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Cyan,
+                FString::Printf(TEXT("Session: %s, User: %s, MatchType: %s"), 
+                *Id, *User, *MatchType));
+        }
+
+        if (MatchType.Equals(TEXT("FreeForAll")))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Attempting to join matching session"));
+            
+            FUniqueNetIdRepl NetId = GetPlayerNetId();
+            if (!NetId.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("Cannot join: Invalid NetId"));
+                continue;
+            }
+
+            OnlineSessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
+            OnlineSessionInterface->JoinSession(*NetId, NAME_GameSession, Result);
+            break;
+        }
+    }
 }
 
 void AMPTesting_CPlusPlusCharacter::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
 {
-	if (!OnlineSessionInterface.IsValid())
-	{
-		return;
-	}
-	FString Address;
-	if (OnlineSessionInterface->GetResolvedConnectString(NAME_GameSession,Address))
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Yellow,
-				FString::Printf(TEXT("Connect String:%s"),*Address)
-				);
-		}
+    if (!OnlineSessionInterface.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("OnlineSessionInterface is not valid"));
+        return;
+    }
 
-		APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
-		if (PlayerController)
-		{
-			PlayerController->ClientTravel(Address,TRAVEL_Absolute);
-		}
-	}
+    FString Address;
+    if (OnlineSessionInterface->GetResolvedConnectString(NAME_GameSession, Address))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Resolved connect string: %s"), *Address);
+        
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(
+                -1,
+                15.f,
+                FColor::Yellow,
+                FString::Printf(TEXT("Connect String: %s"), *Address)
+            );
+        }
+
+        APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
+        if (PlayerController)
+        {
+            PlayerController->ClientTravel(Address, TRAVEL_Absolute);
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get resolved connect string"));
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(
+                -1,
+                15.f,
+                FColor::Red,
+                TEXT("Failed to get connect string")
+            );
+        }
+    }
 }
 
+FString AMPTesting_CPlusPlusCharacter::NetIdToString(const FUniqueNetIdRepl& NetId) const
+{
+	if (!NetId.IsValid())
+	{
+		return TEXT("Invalid_NetId");
+	}
+    
+	// 使用 GetUniqueNetId() 方法获取原始指针
+	if (const FUniqueNetId* RawNetId = NetId.GetUniqueNetId().Get())
+	{
+		return RawNetId->ToString();
+	}
+    
+	return TEXT("Invalid_RawNetId");
+}
+
+void AMPTesting_CPlusPlusCharacter::DebugLoginStatus()
+{
+    IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
+    if (!OnlineSubsystem)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No OnlineSubsystem found"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("OnlineSubsystem: %s"), *OnlineSubsystem->GetSubsystemName().ToString());
+
+    IOnlineIdentityPtr IdentityInterface = OnlineSubsystem->GetIdentityInterface();
+    if (!IdentityInterface.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Identity interface not valid"));
+        return;
+    }
+
+    const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+    if (!LocalPlayer)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No local player found"));
+        return;
+    }
+
+    int32 ControllerId = LocalPlayer->GetControllerId();
+    ELoginStatus::Type LoginStatus = IdentityInterface->GetLoginStatus(ControllerId);
+    
+    FString StatusStr;
+    switch (LoginStatus)
+    {
+        case ELoginStatus::NotLoggedIn: StatusStr = TEXT("Not Logged In"); break;
+        case ELoginStatus::UsingLocalProfile: StatusStr = TEXT("Using Local Profile"); break;
+        case ELoginStatus::LoggedIn: StatusStr = TEXT("Logged In"); break;
+        default: StatusStr = TEXT("Unknown Status"); break;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Login Status: %s"), *StatusStr);
+
+    // 获取并显示用户ID
+    TSharedPtr<const FUniqueNetId> UserId = IdentityInterface->GetUniquePlayerId(ControllerId);
+    if (UserId.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("User ID: %s"), *UserId->ToString());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No valid User ID"));
+    }
+
+    // 显示在屏幕上
+    if (GEngine)
+    {
+        FString Message = FString::Printf(TEXT("Login Status: %s\nUser ID: %s"), 
+            *StatusStr, 
+            UserId.IsValid() ? *UserId->ToString() : TEXT("Invalid"));
+        
+        GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Yellow, Message);
+    }
+}
 
 //////////////////////////////////////////////////////////////////////////
 // Input

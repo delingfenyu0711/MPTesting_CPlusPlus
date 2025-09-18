@@ -77,7 +77,15 @@ public:
 public:
 	//Pointer to the online session interface
 	IOnlineSessionPtr OnlineSessionInterface;
+	FUniqueNetIdRepl GetPlayerNetId() const;
+	FUniqueNetIdRepl CreateOfflineNetId() const;
+	FString NetIdToString(const FUniqueNetIdRepl& NetId) const;
+
+	UFUNCTION(Exec)
+	void DebugLoginStatus();
+
 protected:
+	
 	UFUNCTION(BlueprintCallable)
 	void CreateGameSession();
 
@@ -95,5 +103,6 @@ private:
 	TSharedPtr<FOnlineSessionSearch> SessionSearch;
 	FDelegateHandle FindSessionsCompleteDelegateHandle;
 	FOnJoinSessionCompleteDelegate JoinSessionCompleteDelegate;
+	
 };
 
