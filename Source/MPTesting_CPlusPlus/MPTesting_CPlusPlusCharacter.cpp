@@ -421,6 +421,7 @@ FString AMPTesting_CPlusPlusCharacter::NetIdToString(const FUniqueNetIdRepl& Net
 	return TEXT("Invalid_RawNetId");
 }
 
+
 void AMPTesting_CPlusPlusCharacter::DebugLoginStatus()
 {
     IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
