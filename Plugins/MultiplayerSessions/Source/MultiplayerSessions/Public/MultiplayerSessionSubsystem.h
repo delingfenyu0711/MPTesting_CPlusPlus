@@ -16,6 +16,7 @@ class MULTIPLAYERSESSIONS_API UMultiplayerSessionSubsystem : public UGameInstanc
 	GENERATED_BODY()
 public:
 	UMultiplayerSessionSubsystem();
+	TSharedPtr<FOnlineSessionSettings> LastSessionSetting;
 
 	///
 	///To handle session functionality. The Menu class will call these
@@ -36,8 +37,8 @@ protected:
 	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
 	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnStartSessionComplete(FName SessionName, bool bWasSuccessful);
-	
-	
+	FString NetIdToString(const FUniqueNetIdRepl& NetId) const;
+
 private:
 	IOnlineSessionPtr SessionInterface;
 	///
