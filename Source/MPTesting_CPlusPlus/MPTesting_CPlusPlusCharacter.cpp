@@ -211,6 +211,16 @@ void AMPTesting_CPlusPlusCharacter::JoinGameSession()
     OnlineSessionInterface->FindSessions(*NetId, SessionSearch.ToSharedRef());
 }
 
+void AMPTesting_CPlusPlusCharacter::QuitGameSession()
+{
+	
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		World->ServerTravel(FString("/Game/ThirdPerson/Maps/ThirdPersonMap"));
+	}
+}
+
 void AMPTesting_CPlusPlusCharacter::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
     if (bWasSuccessful)

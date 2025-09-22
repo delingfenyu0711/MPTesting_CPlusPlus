@@ -92,6 +92,9 @@ protected:
 	UFUNCTION(BlueprintCallable)
 	void JoinGameSession();
 
+	UFUNCTION(BlueprintCallable)
+	void QuitGameSession();
+
 	void OnCreateSessionComplete(FName SessionName,bool bWasSuccessful);
 
 	void OnFindSessionComplete(bool bWasSuccessful);
