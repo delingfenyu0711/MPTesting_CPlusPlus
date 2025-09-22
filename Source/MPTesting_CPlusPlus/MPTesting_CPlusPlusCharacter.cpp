@@ -14,8 +14,6 @@
 #include "Interfaces/OnlineSessionInterface.h"
 #include "OnlineSessionSettings.h"
 #include "Online/OnlineSessionNames.h"
-#include "OnlineSessionSettings.h"
-#include "OnlineSubsystem.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 
 
@@ -117,59 +115,6 @@ void AMPTesting_CPlusPlusCharacter::BeginPlay()
 
 	// 调试登录状态
 	DebugLoginStatus();
-}
-
-FUniqueNetIdRepl AMPTesting_CPlusPlusCharacter::GetPlayerNetId() const
-{
-	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
-	if (!OnlineSubsystem)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("No OnlineSubsystem found"));
-		return FUniqueNetIdRepl();
-	}
-
-	IOnlineIdentityPtr IdentityInterface = OnlineSubsystem->GetIdentityInterface();
-	if (!IdentityInterface.IsValid())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Identity interface not valid"));
-		return FUniqueNetIdRepl();
-	}
-
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
-	if (!LocalPlayer)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("No local player found"));
-		return FUniqueNetIdRepl();
-	}
-
-	int32 ControllerId = LocalPlayer->GetControllerId();
-    
-	// 首先尝试从身份接口获取
-	TSharedPtr<const FUniqueNetId> NetIdPtr = IdentityInterface->GetUniquePlayerId(ControllerId);
-	if (NetIdPtr.IsValid())
-	{
-		FUniqueNetIdRepl NetIdRepl(NetIdPtr);
-		UE_LOG(LogTemp, Warning, TEXT("Using NetId from Identity interface: %s"), *NetIdToString(NetIdRepl));
-		return NetIdRepl;
-	}
-
-	// 如果身份接口没有，尝试其他方法
-	FUniqueNetIdRepl PreferredNetId = LocalPlayer->GetPreferredUniqueNetId();
-	if (PreferredNetId.IsValid())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Using PreferredUniqueNetId: %s"), *NetIdToString(PreferredNetId));
-		return PreferredNetId;
-	}
-
-	FUniqueNetIdRepl CachedNetId = LocalPlayer->GetCachedUniqueNetId();
-	if (CachedNetId.IsValid())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Using CachedUniqueNetId: %s"), *NetIdToString(CachedNetId));
-		return CachedNetId;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Could not get valid NetId from any source"));
-	return FUniqueNetIdRepl();
 }
 
 void AMPTesting_CPlusPlusCharacter::CreateGameSession()
@@ -483,6 +428,61 @@ void AMPTesting_CPlusPlusCharacter::DebugLoginStatus()
     }
 }
 
+
+FUniqueNetIdRepl AMPTesting_CPlusPlusCharacter::GetPlayerNetId() const
+{
+	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
+	if (!OnlineSubsystem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No OnlineSubsystem found"));
+		return FUniqueNetIdRepl();
+	}
+
+	IOnlineIdentityPtr IdentityInterface = OnlineSubsystem->GetIdentityInterface();
+	if (!IdentityInterface.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Identity interface not valid"));
+		return FUniqueNetIdRepl();
+	}
+
+	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	if (!LocalPlayer)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No local player found"));
+		return FUniqueNetIdRepl();
+	}
+
+	int32 ControllerId = LocalPlayer->GetControllerId();
+    
+	// 首先尝试从身份接口获取
+	TSharedPtr<const FUniqueNetId> NetIdPtr = IdentityInterface->GetUniquePlayerId(ControllerId);
+	if (NetIdPtr.IsValid())
+	{
+		FUniqueNetIdRepl NetIdRepl(NetIdPtr);
+		UE_LOG(LogTemp, Warning, TEXT("Using NetId from Identity interface: %s"), *NetIdToString(NetIdRepl));
+		return NetIdRepl;
+	}
+
+	// 如果身份接口没有，尝试其他方法
+	FUniqueNetIdRepl PreferredNetId = LocalPlayer->GetPreferredUniqueNetId();
+	if (PreferredNetId.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Using PreferredUniqueNetId: %s"), *NetIdToString(PreferredNetId));
+		return PreferredNetId;
+	}
+
+	FUniqueNetIdRepl CachedNetId = LocalPlayer->GetCachedUniqueNetId();
+	if (CachedNetId.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Using CachedUniqueNetId: %s"), *NetIdToString(CachedNetId));
+		return CachedNetId;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Could not get valid NetId from any source"));
+	return FUniqueNetIdRepl();
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 // Input
 
@@ -551,3 +551,4 @@ void AMPTesting_CPlusPlusCharacter::Look(const FInputActionValue& Value)
 		AddControllerPitchInput(LookAxisVector.Y);
 	}
 }
+

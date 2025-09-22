@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Interfaces/OnlineSessionInterface.h"
+#include "OnlineSessionSettings.h"
 #include "MultiplayerSessionSubsystem.h"
 #include "Menu.generated.h"
 
@@ -30,6 +32,12 @@ protected:
 	///
 	UFUNCTION(BlueprintCallable, Category = "MultiplayerSessions|Menu")
 	void OnCreateSession(bool bWasSuccessful);
+	void OnFindSession(const TArray<FOnlineSessionSearchResult>& SessionResults, bool bWasSuccessful);
+	void OnJoinSession(EOnJoinSessionCompleteResult::Type Result);
+	UFUNCTION(BlueprintCallable, Category = "MultiplayerSessions|Menu")
+	void OnDestroySession(bool bWasSuccessful);
+	UFUNCTION(BlueprintCallable, Category = "MultiplayerSessions|Menu")
+	void OnStartSession(bool bWasSuccessful);
 	
 	
 private:
@@ -39,12 +47,18 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	class UButton* JoinButton;
 
+	UPROPERTY(meta = (BindWidget))
+	class UButton* QuitButton;
+
 	UFUNCTION(BlueprintCallable, Category = "MultiplayerSessions|Menu")
 	void HostButtonClicked();
 
 	UFUNCTION(BlueprintCallable, Category = "MultiplayerSessions|Menu")
 	void JoinButtonClicked();
 
+	UFUNCTION(BlueprintCallable, Category = "MultiplayerSessions|Menu")
+	void QuitButtonClicked();
+	
 	void MenuTearDown();
 
 	//The subsystem designed to handle all online session functonality

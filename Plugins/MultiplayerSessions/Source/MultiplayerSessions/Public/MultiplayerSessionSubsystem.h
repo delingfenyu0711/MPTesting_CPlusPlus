@@ -10,11 +10,11 @@
 ///
 /// Declaring our own custom delegates for the Menu class to bind callbacks to 
 ///
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnCreateSessionComplete,bool, bWasSuccessful);
-DECLARE_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnFindSessionComplete,const TArray<FOnlineSessionSearchResult>& SessionResult,bool bWasSuccessful);
-DECLARE_MULTICAST_DELEGATE_OneParam(FMultiplayerOnJoinSessionComplete,EOnJoinSessionCompleteResult::Type Result);
-DECLARE_MULTICAST_DELEGATE_OneParam(FMultiplayerOnDestroySessionComplete,bool, bWasSuccessful);
-DECLARE_MULTICAST_DELEGATE_OneParam(FMultiplayerOnStartSessionComplete,bool, bWasSuccessful);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnCreateSessionComplete, bool, bWasSuccessful);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnFindSessionComplete, const TArray<FOnlineSessionSearchResult>&, bool);
+DECLARE_MULTICAST_DELEGATE_OneParam(FMultiplayerOnJoinSessionComplete, EOnJoinSessionCompleteResult::Type);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnDestroySessionComplete, bool, bWasSuccessful);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnStartSessionComplete, bool, bWasSuccessful);
 /**
  * 
  */
@@ -24,7 +24,6 @@ class MULTIPLAYERSESSIONS_API UMultiplayerSessionSubsystem : public UGameInstanc
 	GENERATED_BODY()
 public:
 	UMultiplayerSessionSubsystem();
-	TSharedPtr<FOnlineSessionSettings> LastSessionSetting;
 
 	///
 	///To handle session functionality. The Menu class will call these
@@ -34,12 +33,17 @@ public:
 	void JoinSession(const FOnlineSessionSearchResult& SessionResult);
 	void StartSession();
 	void DestroySession();
+	FUniqueNetIdRepl GetPlayerNetId() const;
 
 
 	///
 	///Our own custom delegates foe the Menu class to bind callbacks to 
 	///
 	FMultiplayerOnCreateSessionComplete MultiplayerOnCreateSessionComplete;
+	FMultiplayerOnFindSessionComplete MultiplayerOnFindSessionComplete;
+	FMultiplayerOnJoinSessionComplete MultiplayerOnJoinSessionComplete;
+	FMultiplayerOnDestroySessionComplete MultiplayerOnDestroySessionComplete;
+	FMultiplayerOnStartSessionComplete MultiplayerOnStartSessionComplete;
 	
 protected:
 	///
@@ -55,6 +59,9 @@ protected:
 
 private:
 	IOnlineSessionPtr SessionInterface;
+	TSharedPtr<FOnlineSessionSettings> LastSessionSetting;
+	TSharedPtr<FOnlineSessionSearch> LastSessionSearch;
+	
 	///
 	///To add to the Online Session Interface delegate list.
 	///We'll bind our MultiplayerSessionSubsystem internal callbacks to these.
@@ -69,4 +76,5 @@ private:
 	FDelegateHandle DestroySessionCompleteDelegateHandle;
 	FOnStartSessionCompleteDelegate StartSessionCompleteDelegate;
 	FDelegateHandle StartSessionCompleteDelegateHandle;
+	
 };
