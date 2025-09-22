@@ -6,6 +6,11 @@
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemUtils.h"
 #include "Online/OnlineSessionNames.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerState.h"  
+#include "Engine/LocalPlayer.h"
+#include "Interfaces/OnlineIdentityInterface.h"
 
 UMultiplayerSessionSubsystem::UMultiplayerSessionSubsystem():
 	CreateSessionCompleteDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this,&ThisClass::OnCreateSessionComplete)),

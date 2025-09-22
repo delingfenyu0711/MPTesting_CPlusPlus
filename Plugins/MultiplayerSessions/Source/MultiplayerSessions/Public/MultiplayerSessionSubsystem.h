@@ -33,6 +33,7 @@ public:
 	void JoinSession(const FOnlineSessionSearchResult& SessionResult);
 	void StartSession();
 	void DestroySession();
+	UFUNCTION(BlueprintCallable, Category = "MultiplayerSessions|Menu")
 	FUniqueNetIdRepl GetPlayerNetId() const;
 
 
